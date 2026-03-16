@@ -6,6 +6,7 @@
 #![deny(missing_docs)]
 
 use serde::{Deserialize, Serialize};
+use leapfrog::Value;
 
 // ─────────────────────────────────────────────────────────────────────────────
 // WeightedEntity
@@ -79,7 +80,36 @@ impl WeightedEntity {
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
-// SignalEvent
+// leapfrog::Value implementation
+// ─────────────────────────────────────────────────────────────────────────────
+
+/// Sentinel `entity_id` values reserved for the leapfrog map internals.
+/// These IDs must **never** be assigned to real financial entities.
+const LEAPFROG_NULL_ID: u64     = u64::MAX;
+const LEAPFROG_REDIRECT_ID: u64 = u64::MAX - 1;
+
+impl Value for WeightedEntity {
+    #[inline(always)]
+    fn is_redirect(&self) -> bool {
+        self.entity_id == LEAPFROG_REDIRECT_ID
+    }
+
+    #[inline(always)]
+    fn is_null(&self) -> bool {
+        self.entity_id == LEAPFROG_NULL_ID
+    }
+
+    #[inline(always)]
+    fn redirect() -> Self {
+        WeightedEntity::new(LEAPFROG_REDIRECT_ID, 0.0)
+    }
+
+    #[inline(always)]
+    fn null() -> Self {
+        WeightedEntity::new(LEAPFROG_NULL_ID, 0.0)
+    }
+}
+
 // ─────────────────────────────────────────────────────────────────────────────
 
 /// Events emitted by the Sensing Agent and consumed by the Reasoning Agent.

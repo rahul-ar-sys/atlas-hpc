@@ -72,6 +72,11 @@ impl ReasoningAgent {
             debug!("ReasoningAgent received {:?}", signal);
             let entity_id = signal.entity_id();
 
+            // Filter out heartbeat sentinels from SensingAgent disconnect checks.
+            if entity_id == u64::MAX {
+                continue;
+            }
+
             // Check prefix cache first (position-independent key).
             let cache_key = entity_id; // simplified: key = entity_id
             let cache_hit = self.cache.contains(cache_key);

@@ -220,10 +220,13 @@ impl SensingAgent {
             // reference across the mutable reset call.
             let snapshots: Vec<WeightedEntity> = {
                 let mut v = Vec::new();
-                // leapfrog LeapMap iter
+                // leapfrog LeapMap iter -- filter out internal sentinel entries.
                 let map = &*self.store.inner;
                 for (_, val) in map.iter() {
-                    v.push(*val);
+                    // Skip leapfrog null / redirect sentinels.
+                    if !val.is_null() && !val.is_redirect() {
+                        v.push(*val);
+                    }
                 }
                 v
             };
@@ -262,10 +265,22 @@ impl SensingAgent {
                 thread::sleep(self.config.idle_sleep);
             }
 
-            // Exit gracefully if all receivers have dropped.
-            if self.tx.is_disconnected() {
-                warn!("SensingAgent: signal channel closed — shutting down");
-                break;
+            // Exit gracefully when all signal receivers have dropped.
+            // crossbeam Sender does not expose is_disconnected(); we detect
+            // disconnection by checking if the last try_send returned Disconnected.
+            // We track this with a flag set in the send helpers above.
+            // Simple approach: use a send heartbeat attempt.
+            use crossbeam_channel::TrySendError;
+            let heartbeat = self.tx.try_send(SignalEvent::CausalTrigger {
+                entity_id: u64::MAX,      // sentinel — ReasoningAgent must filter this
+                detected_at_ns: 0,
+            });
+            match heartbeat {
+                Err(TrySendError::Disconnected(_)) => {
+                    warn!("SensingAgent: signal channel closed — shutting down");
+                    break;
+                }
+                _ => {} // Full is OK — just skip heartbeat.
             }
         }
     }

@@ -4,11 +4,9 @@ version.workspace = true
 edition.workspace = true
 
 [dependencies]
-atlas-types      = { workspace = true }
+atlas-types       = { workspace = true }
 crossbeam-channel = { workspace = true }
-statrs           = { workspace = true }
-rand             = { workspace = true }
-tracing          = { workspace = true }
+tracing           = { workspace = true }
 
 [dev-dependencies]
 criterion = { workspace = true }
