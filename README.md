@@ -11,28 +11,29 @@ An agent-centric financial intelligence platform targeting HFT-grade, sub-millis
 ## Architecture
 
 ```
-Market Feed (DPDK/Software)
+Binance WebSocket (!ticker@arr)
         │
         ▼
 ┌───────────────────────────────────────┐
 │  Phase 1 — Hot Tier  (hot-tier crate) │
-│  LeapMap<u64, WeightedEntity>          │
+│  DashMap<u64, WeightedEntity>         │
 │  < 5 µs reads / < 10 µs writes        │
 └───────────────┬───────────────────────┘
                 │ SignalEvent channel (crossbeam)
                 ▼
 ┌───────────────────────────────────────────────┐
-│  Phase 2 — Warm Tier  (warm-tier crate)        │
-│  CausalGraph: label store + BFS traversal      │
-│  TEMPORAL_LINK materialisation (p < 0.05)      │
-│  < 100 µs spreading activation                 │
+│  Phase 2 — Warm Tier  (warm-tier crate)       │
+│  CausalGraph: label store + BFS traversal     │
+│  TEMPORAL_LINK materialisation (p < 0.05)     │
+│  < 100 µs spreading activation                │
 └───────────────┬───────────────────────────────┘
                 │
                 ▼
 ┌──────────────────────────────────────────────────────┐
-│  Phase 3 — Intelligence  (intelligence crate)         │
-│  ReasoningAgent + PrefixCache (pos-independent)       │
-│  Dirty-Bit Invalidation / NVMe offload / TEE guard    │
+│  Phase 3 — Intelligence  (intelligence crate)        │
+│  ReasoningAgent + Local LLM (Ollama/Llama-3)         │
+│  PrefixCache (pos-independent context assembly)      │
+│  Dirty-Bit Invalidation / NVMe offload / TEE guard   │
 └──────────────────────────────────────────────────────┘
 ```
 
@@ -73,15 +74,27 @@ rustup toolchain install nightly
 # Build all crates
 cargo build --workspace --release
 
+# Format code
+cargo fmt --all
+
 # Run all tests
 cargo test --workspace
 
-# Run the integration simulation (10 000 entities, 10s demo)
+# Run the live integration simulation (Binance WebSocket + LLM Reasoning)
 cargo run --release
 
 # Run benchmarks (requires release, outputs HTML to target/criterion/)
 cargo bench --workspace
 ```
+
+## Running with Local LLM Reasoning
+
+The `ReasoningAgent` detects causal spikes and synthesizes insights. By default, it POSTs prompts to a local LLM endpoint conforming to the OpenAI REST structure at `http://localhost:11434/v1/chat/completions`.
+1. Install [Ollama](https://ollama.com/)
+2. Pull a performant reasoning model (e.g., `ollama pull llama3`)
+3. Ensure the Ollama server is running locally on port 11434 before running `cargo run --release`.
+
+> **Note:** If Ollama is offline or unreachable, the Intelligence engine gracefully falls back to generating deterministic raw metric summaries without crashing, allowing core HFT data pipelines to continue uninterrupted.
 
 ## Non-Functional Targets
 
