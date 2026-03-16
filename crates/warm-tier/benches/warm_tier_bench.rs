@@ -1,7 +1,7 @@
 //! Criterion benchmarks for the Warm Tier causal graph.
 
-use criterion::{black_box, criterion_group, criterion_main, BenchmarkId, Criterion, Throughput};
 use atlas_types::LabelId;
+use criterion::{black_box, criterion_group, criterion_main, BenchmarkId, Criterion, Throughput};
 use warm_tier::CausalGraph;
 
 fn seed_graph(g: &CausalGraph, entity_count: usize) {
@@ -23,15 +23,9 @@ fn bench_spreading_activation(c: &mut Criterion) {
         seed_graph(&g, n);
 
         group.throughput(Throughput::Elements(1));
-        group.bench_with_input(
-            BenchmarkId::new("entities", n),
-            &n,
-            |b, _| {
-                b.iter(|| {
-                    black_box(g.spreading_activation(black_box(LabelId::L_CRUDE_SHOCK), 3))
-                })
-            },
-        );
+        group.bench_with_input(BenchmarkId::new("entities", n), &n, |b, _| {
+            b.iter(|| black_box(g.spreading_activation(black_box(LabelId::L_CRUDE_SHOCK), 3)))
+        });
     }
     group.finish();
 }
@@ -56,12 +50,15 @@ fn bench_materialize_link(c: &mut Criterion) {
 
     let mut group = c.benchmark_group("warm_tier_temporal_link");
     group.bench_function("materialize_100_entities", |b| {
-        b.iter(|| {
-            g.materialize_temporal_link(black_box(0), black_box(0.25))
-        })
+        b.iter(|| g.materialize_temporal_link(black_box(0), black_box(0.25)))
     });
     group.finish();
 }
 
-criterion_group!(benches, bench_spreading_activation, bench_tag_entity, bench_materialize_link);
+criterion_group!(
+    benches,
+    bench_spreading_activation,
+    bench_tag_entity,
+    bench_materialize_link
+);
 criterion_main!(benches);

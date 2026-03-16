@@ -4,9 +4,9 @@
 //! penalty for static financial documents.  Cache keys are derived from
 //! `entity_id` (in production: a hash of the entity_id + label fingerprint).
 
-use std::collections::HashSet;
-use dashmap::DashMap;
 use atlas_types::LabelId;
+use dashmap::DashMap;
+use std::collections::HashSet;
 use tracing::debug;
 
 // ─────────────────────────────────────────────────────────────────────────────
@@ -43,7 +43,9 @@ pub struct PrefixCache {
 impl PrefixCache {
     /// Create an empty cache.
     pub fn new() -> Self {
-        Self { entries: DashMap::new() }
+        Self {
+            entries: DashMap::new(),
+        }
     }
 
     /// Insert a new cache entry.
@@ -83,11 +85,13 @@ impl PrefixCache {
 
         for mut entry in self.entries.iter_mut() {
             let entry_labels: HashSet<LabelId> = entry.label_set.iter().copied().collect();
-            let is_dirty = entry.entity_id == entity_id
-                || !entry_labels.is_disjoint(&updated_set);
+            let is_dirty = entry.entity_id == entity_id || !entry_labels.is_disjoint(&updated_set);
 
             if is_dirty && !entry.dirty {
-                debug!("dirty-bit invalidating cache entry for entity {}", entry.entity_id);
+                debug!(
+                    "dirty-bit invalidating cache entry for entity {}",
+                    entry.entity_id
+                );
                 entry.dirty = true;
             }
         }

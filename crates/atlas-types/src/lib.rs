@@ -5,8 +5,8 @@
 
 #![deny(missing_docs)]
 
-use serde::{Deserialize, Serialize};
 use leapfrog::Value;
+use serde::{Deserialize, Serialize};
 
 // ─────────────────────────────────────────────────────────────────────────────
 // WeightedEntity
@@ -85,8 +85,8 @@ impl WeightedEntity {
 
 /// Sentinel `entity_id` values reserved for the leapfrog map internals.
 /// These IDs must **never** be assigned to real financial entities.
-const LEAPFROG_NULL_ID: u64     = u64::MAX;
-const LEAPFROG_REDIRECT_ID: u64 = u64::MAX - 1;
+const LEAPFROG_NULL_ID: u64 = 0;
+const LEAPFROG_REDIRECT_ID: u64 = u64::MAX;
 
 impl Value for WeightedEntity {
     #[inline(always)]
@@ -220,9 +220,24 @@ pub struct TemporalLink {
 
 impl TemporalLink {
     /// Create a new temporal link.  Panics in debug if `p_value >= 0.05`.
-    pub fn new(src: LabelId, dst: LabelId, p_value: f32, correlation_abs: f32, created_ns: u64) -> Self {
-        debug_assert!(p_value < 0.05, "TemporalLink requires p < 0.05, got {p_value}");
-        Self { src, dst, p_value, correlation_abs, created_ns }
+    pub fn new(
+        src: LabelId,
+        dst: LabelId,
+        p_value: f32,
+        correlation_abs: f32,
+        created_ns: u64,
+    ) -> Self {
+        debug_assert!(
+            p_value < 0.05,
+            "TemporalLink requires p < 0.05, got {p_value}"
+        );
+        Self {
+            src,
+            dst,
+            p_value,
+            correlation_abs,
+            created_ns,
+        }
     }
 }
 
@@ -248,7 +263,7 @@ pub fn now_ns() -> u64 {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use std::mem::{size_of, align_of};
+    use std::mem::{align_of, size_of};
 
     #[test]
     fn weighted_entity_size_is_64_bytes() {
@@ -267,16 +282,27 @@ mod tests {
         // W_new = 0.8 * 0.9 + 0.5 * 0.1 = 0.72 + 0.05 = 0.77
         e.recalculate_weight(0.5, 0.9, 0.1);
         let expected = 0.8f32 * 0.9 + 0.5 * 0.1;
-        assert!((e.importance_weight - expected).abs() < f32::EPSILON,
-            "Expected {expected}, got {}", e.importance_weight);
+        assert!(
+            (e.importance_weight - expected).abs() < f32::EPSILON,
+            "Expected {expected}, got {}",
+            e.importance_weight
+        );
     }
 
     #[test]
     fn signal_event_entity_id_accessor() {
-        let ev = SignalEvent::CausalTrigger { entity_id: 42, detected_at_ns: 0 };
+        let ev = SignalEvent::CausalTrigger {
+            entity_id: 42,
+            detected_at_ns: 0,
+        };
         assert_eq!(ev.entity_id(), 42);
 
-        let ev2 = SignalEvent::WeightSpike { entity_id: 99, delta_w: 0.3, new_weight: 0.9, detected_at_ns: 0 };
+        let ev2 = SignalEvent::WeightSpike {
+            entity_id: 99,
+            delta_w: 0.3,
+            new_weight: 0.9,
+            detected_at_ns: 0,
+        };
         assert_eq!(ev2.entity_id(), 99);
     }
 

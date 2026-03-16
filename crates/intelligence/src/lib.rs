@@ -5,8 +5,8 @@
 
 #![deny(missing_docs)]
 
+pub mod agent;
 pub mod cache;
+pub mod offload;
 pub mod orchestrator;
 pub mod tee;
-pub mod offload;
-pub mod agent;

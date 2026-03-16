@@ -1,11 +1,11 @@
 //! Agent trait and ReasoningAgent implementation.
 
-use std::sync::Arc;
+use crate::cache::PrefixCache;
 use atlas_types::{LabelId, SignalEvent};
 use crossbeam_channel::Receiver;
-use tracing::{info, debug};
+use std::sync::Arc;
+use tracing::{debug, info};
 use warm_tier::CausalGraph;
-use crate::cache::PrefixCache;
 
 // ─────────────────────────────────────────────────────────────────────────────
 // AgentTrait
@@ -62,7 +62,11 @@ impl ReasoningAgent {
         graph: CausalGraph,
         cache: Arc<PrefixCache>,
     ) -> Self {
-        Self { signal_rx, graph, cache }
+        Self {
+            signal_rx,
+            graph,
+            cache,
+        }
     }
 
     /// Blocking run loop.  Call from a dedicated thread.
@@ -106,7 +110,8 @@ impl ReasoningAgent {
 
             // Store result in cache.
             if !cache_hit {
-                self.cache.insert(cache_key, related, insight.contributing_labels.clone());
+                self.cache
+                    .insert(cache_key, related, insight.contributing_labels.clone());
             }
 
             info!(
@@ -149,7 +154,10 @@ mod tests {
 
     #[test]
     fn reasoning_context_can_be_built() {
-        let trigger = SignalEvent::CausalTrigger { entity_id: 1, detected_at_ns: 0 };
+        let trigger = SignalEvent::CausalTrigger {
+            entity_id: 1,
+            detected_at_ns: 0,
+        };
         let ctx = ReasoningContext {
             trigger,
             related_entities: vec![2, 3, 4],

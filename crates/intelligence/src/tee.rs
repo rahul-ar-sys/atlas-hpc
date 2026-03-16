@@ -48,7 +48,8 @@ impl SoftwareTeeGuard {
     /// Returns `(nonce_bytes, ciphertext)`.  Both must be stored and provided
     /// to [`unseal`] for decryption.
     pub fn seal<T: Serialize>(&self, value: &T) -> Result<(Vec<u8>, Vec<u8>), TeeError> {
-        let plaintext = serde_json::to_vec(value).map_err(|e| TeeError::Serialization(e.to_string()))?;
+        let plaintext =
+            serde_json::to_vec(value).map_err(|e| TeeError::Serialization(e.to_string()))?;
         let nonce = Aes256Gcm::generate_nonce(OsRng);
         let ciphertext = self
             .cipher
@@ -58,7 +59,11 @@ impl SoftwareTeeGuard {
     }
 
     /// Unseal (decrypt + verify) a previously sealed value.
-    pub fn unseal<T: DeserializeOwned>(&self, nonce_bytes: &[u8], ciphertext: &[u8]) -> Result<T, TeeError> {
+    pub fn unseal<T: DeserializeOwned>(
+        &self,
+        nonce_bytes: &[u8],
+        ciphertext: &[u8],
+    ) -> Result<T, TeeError> {
         let nonce = Nonce::from_slice(nonce_bytes);
         let plaintext = self
             .cipher

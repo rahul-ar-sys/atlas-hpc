@@ -19,12 +19,12 @@
 
 use std::sync::Arc;
 use std::thread;
-use std::time::{Duration, Instant};
+use std::time::Duration;
 
 use atlas_types::{now_ns, SignalEvent, WeightedEntity};
 use crossbeam_channel::{bounded, Receiver, Sender};
-use leapfrog::LeapMap;
-use tracing::{debug, info, warn};
+use dashmap::DashMap;
+use tracing::{debug, info};
 
 // ─────────────────────────────────────────────────────────────────────────────
 // Weight update constants (module-level defaults — callers may override)
@@ -54,14 +54,14 @@ pub const WEIGHT_SPIKE_THRESHOLD: f32 = 0.15;
 /// [`SensingAgent`]) can hold references without cloning data.
 #[derive(Clone)]
 pub struct HotStore {
-    inner: Arc<LeapMap<u64, WeightedEntity>>,
+    inner: Arc<dashmap::DashMap<u64, WeightedEntity>>,
 }
 
 impl HotStore {
     /// Create a new, empty `HotStore` with the given initial capacity hint.
     pub fn with_capacity(cap: usize) -> Self {
         Self {
-            inner: Arc::new(LeapMap::with_capacity(cap)),
+            inner: Arc::new(dashmap::DashMap::with_capacity(cap)),
         }
     }
 
@@ -81,8 +81,9 @@ impl HotStore {
     /// **Latency target:** < 5 µs P50 under sustained load.
     #[inline]
     pub fn get(&self, entity_id: u64) -> Option<WeightedEntity> {
-        // leapfrog returns a guard; we copy the value and release immediately.
-        self.inner.get(&entity_id).map(|guard| *guard)
+        self.inner
+            .get(&entity_id)
+            .map(|ref_multi| *ref_multi.value())
     }
 
     /// Update the importance weight of an entity using the formula
@@ -99,35 +100,31 @@ impl HotStore {
         alpha: f32,
         beta: f32,
     ) -> Option<(f32, f32)> {
-        // LeapMap::update provides an atomic read-modify-write closure.
-        let mut result = None;
-        self.inner.update(entity_id, |entity| {
+        if let Some(mut entity) = self.inner.get_mut(&entity_id) {
             let old = entity.importance_weight;
             entity.recalculate_weight(surprise, alpha, beta);
             entity.last_updated_ns = now_ns();
-            result = Some((old, entity.importance_weight));
-            *entity
-        });
-        result
+            Some((old, entity.importance_weight))
+        } else {
+            None
+        }
     }
 
     /// Atomically set `causal_trigger_bit` for an entity.
     pub fn set_causal_trigger(&self, entity_id: u64, value: bool) {
-        self.inner.update(entity_id, |mut e| {
+        if let Some(mut e) = self.inner.get_mut(&entity_id) {
             e.causal_trigger_bit = value;
             e.last_updated_ns = now_ns();
-            e
-        });
+        }
     }
 
     /// Atomically update `latest_price` (zero-copy market-feed ingestion path).
     #[inline]
     pub fn tick_price(&self, entity_id: u64, price: f64) {
-        self.inner.update(entity_id, |mut e| {
+        if let Some(mut e) = self.inner.get_mut(&entity_id) {
             e.latest_price = price;
             e.last_updated_ns = now_ns();
-            e
-        });
+        }
     }
 
     /// Returns the number of entities currently tracked.
@@ -206,9 +203,13 @@ impl SensingAgent {
             }
         }
 
-        info!("SensingAgent started (spike_threshold={})", self.config.spike_threshold);
+        info!(
+            "SensingAgent started (spike_threshold={})",
+            self.config.spike_threshold
+        );
 
-        let mut prev_weights: std::collections::HashMap<u64, f32> = std::collections::HashMap::new();
+        let mut prev_weights: std::collections::HashMap<u64, f32> =
+            std::collections::HashMap::new();
 
         loop {
             // Full sweep of the store.
@@ -220,13 +221,8 @@ impl SensingAgent {
             // reference across the mutable reset call.
             let snapshots: Vec<WeightedEntity> = {
                 let mut v = Vec::new();
-                // leapfrog LeapMap iter -- filter out internal sentinel entries.
-                let map = &*self.store.inner;
-                for (_, val) in map.iter() {
-                    // Skip leapfrog null / redirect sentinels.
-                    if !val.is_null() && !val.is_redirect() {
-                        v.push(*val);
-                    }
+                for pair in self.store.inner.iter() {
+                    v.push(*pair.value());
                 }
                 v
             };
@@ -246,7 +242,10 @@ impl SensingAgent {
                 }
 
                 // ── Weight spike check ─────────────────────────────────────
-                let prev = prev_weights.get(&id).copied().unwrap_or(entity.importance_weight);
+                let prev = prev_weights
+                    .get(&id)
+                    .copied()
+                    .unwrap_or(entity.importance_weight);
                 let delta = (entity.importance_weight - prev).abs();
                 if delta >= self.config.spike_threshold {
                     debug!("WeightSpike Δ={delta:.3} for entity {id}");
@@ -263,24 +262,6 @@ impl SensingAgent {
 
             if idle {
                 thread::sleep(self.config.idle_sleep);
-            }
-
-            // Exit gracefully when all signal receivers have dropped.
-            // crossbeam Sender does not expose is_disconnected(); we detect
-            // disconnection by checking if the last try_send returned Disconnected.
-            // We track this with a flag set in the send helpers above.
-            // Simple approach: use a send heartbeat attempt.
-            use crossbeam_channel::TrySendError;
-            let heartbeat = self.tx.try_send(SignalEvent::CausalTrigger {
-                entity_id: u64::MAX,      // sentinel — ReasoningAgent must filter this
-                detected_at_ns: 0,
-            });
-            match heartbeat {
-                Err(TrySendError::Disconnected(_)) => {
-                    warn!("SensingAgent: signal channel closed — shutting down");
-                    break;
-                }
-                _ => {} // Full is OK — just skip heartbeat.
             }
         }
     }
@@ -323,7 +304,10 @@ pub struct SoftwareFeedAdapter {
 impl SoftwareFeedAdapter {
     /// Create a software feed adapter for the given entity IDs.
     pub fn new(entity_ids: Vec<u64>) -> Self {
-        Self { entity_ids, rng_state: 0xDEAD_BEEF_1234_5678 }
+        Self {
+            entity_ids,
+            rng_state: 0xDEAD_BEEF_1234_5678,
+        }
     }
 
     /// Xorshift64 PRNG (no stdlib dependency, deterministic).
@@ -386,7 +370,10 @@ mod tests {
         let (old, new) = store.update_weight(42, 0.5, 0.9, 0.1).unwrap();
         assert!((old - 0.8).abs() < f32::EPSILON);
         let expected = 0.8f32 * 0.9 + 0.5 * 0.1;
-        assert!((new - expected).abs() < f32::EPSILON, "got {new}, expected {expected}");
+        assert!(
+            (new - expected).abs() < f32::EPSILON,
+            "got {new}, expected {expected}"
+        );
     }
 
     #[test]
@@ -416,7 +403,9 @@ mod tests {
         // Flip the trigger bit — agent should catch it within 1 sweep.
         store.set_causal_trigger(99, true);
 
-        let event = rx.recv_timeout(Duration::from_millis(500)).expect("event not received");
+        let event = rx
+            .recv_timeout(Duration::from_millis(500))
+            .expect("event not received");
         assert_eq!(event.entity_id(), 99);
         matches!(event, SignalEvent::CausalTrigger { .. });
     }
@@ -426,20 +415,23 @@ mod tests {
     #[test]
     fn read_latency_sanity_check() {
         let store = make_store();
-        for i in 0..1000u64 {
+        for i in 1..=1000u64 {
             store.insert(WeightedEntity::new(i, i as f64));
         }
 
         let start = Instant::now();
         let iterations = 10_000usize;
-        for i in 0..iterations as u64 {
-            let _ = store.get(i % 1000);
+        for i in 1..=iterations as u64 {
+            let _ = store.get((i % 1000) + 1);
         }
         let elapsed = start.elapsed();
         let avg_ns = elapsed.as_nanos() / iterations as u128;
         println!("Average get latency: {avg_ns} ns");
         // In debug builds, allow up to 50 µs.  In release this should be < 5 µs.
-        assert!(avg_ns < 50_000, "Average read latency {avg_ns} ns exceeds 50 µs");
+        assert!(
+            avg_ns < 50_000,
+            "Average read latency {avg_ns} ns exceeds 50 µs"
+        );
     }
 
     #[test]

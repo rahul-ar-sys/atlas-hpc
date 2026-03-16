@@ -1,3 +1,4 @@
+use std::sync::Arc;
 /// Atlas-Finance HPC-Financial-Brain MVP — Integration Harness
 ///
 /// Simulates a live market feed session:
@@ -6,18 +7,16 @@
 /// 3. Starts SensingAgent (core-pinned) and ReasoningAgent
 /// 4. Fires 60 seconds of synthetic market ticks and causal triggers
 /// 5. Prints a latency + throughput summary at exit
-
 use std::thread;
 use std::time::{Duration, Instant};
-use std::sync::Arc;
 
-use atlas_types::{LabelId, WeightedEntity, now_ns};
-use hot_tier::{HotStore, SensingAgent, SensingConfig, SoftwareFeedAdapter, MarketFeedAdapter};
-use warm_tier::CausalGraph;
-use intelligence::cache::PrefixCache;
+use atlas_types::{now_ns, LabelId, WeightedEntity};
+use hot_tier::{HotStore, MarketFeedAdapter, SensingAgent, SensingConfig, SoftwareFeedAdapter};
 use intelligence::agent::ReasoningAgent;
+use intelligence::cache::PrefixCache;
+use intelligence::offload::{AgentState, NvmeOffloadAdapter, SoftwareNvmeAdapter};
 use intelligence::tee::SoftwareTeeGuard;
-use intelligence::offload::{SoftwareNvmeAdapter, NvmeOffloadAdapter, AgentState};
+use warm_tier::CausalGraph;
 
 fn main() {
     // Initialise tracing logger (set RUST_LOG=info for output).
@@ -110,7 +109,10 @@ fn main() {
     println!("      ✓ NVMe offload → restore → evict lifecycle verified");
 
     // ── Phase 4: Market simulation ───────────────────────────────────────────
-    println!("[4/4] Running {} second market simulation...", SIM_DURATION.as_secs());
+    println!(
+        "[4/4] Running {} second market simulation...",
+        SIM_DURATION.as_secs()
+    );
     let entity_ids: Vec<u64> = (0..ENTITY_COUNT as u64).collect();
     let mut feed = SoftwareFeedAdapter::new(entity_ids.clone());
 
@@ -131,7 +133,9 @@ fn main() {
             let _ = store.get(id);
             let read_ns = t0.elapsed().as_nanos() as u64;
             read_latency_sum_ns += read_ns as u128;
-            if read_ns > max_read_ns { max_read_ns = read_ns; }
+            if read_ns > max_read_ns {
+                max_read_ns = read_ns;
+            }
 
             // Write latency measurement (price tick + weight update).
             let t1 = Instant::now();
@@ -139,7 +143,9 @@ fn main() {
             store.update_weight(id, 0.05, 0.9, 0.1);
             let write_ns = t1.elapsed().as_nanos() as u64;
             write_latency_sum_ns += write_ns as u128;
-            if write_ns > max_write_ns { max_write_ns = write_ns; }
+            if write_ns > max_write_ns {
+                max_write_ns = write_ns;
+            }
 
             tick_count += 1;
 
@@ -164,7 +170,11 @@ fn main() {
     println!("  Total ticks    : {tick_count}");
     println!("  Throughput     : {tps:.0} ticks/sec");
     println!("  Trigger fires  : {trigger_fires}");
-    println!("  Cache entries  : {} (clean: {})", cache.len(), cache.clean_count());
+    println!(
+        "  Cache entries  : {} (clean: {})",
+        cache.len(),
+        cache.clean_count()
+    );
     println!("  Temporal links : {}", graph.temporal_link_count());
     println!("  Grounding ratio: {:.4}", graph.grounding_ratio());
     println!();

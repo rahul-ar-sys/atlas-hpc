@@ -2,8 +2,8 @@
 //!
 //! Run with: `cargo bench --package hot-tier`
 
-use criterion::{black_box, criterion_group, criterion_main, BenchmarkId, Criterion, Throughput};
 use atlas_types::WeightedEntity;
+use criterion::{black_box, criterion_group, criterion_main, BenchmarkId, Criterion, Throughput};
 use hot_tier::HotStore;
 
 fn bench_reads(c: &mut Criterion) {
@@ -97,5 +97,10 @@ fn bench_sustained_throughput(c: &mut Criterion) {
     group.finish();
 }
 
-criterion_group!(benches, bench_reads, bench_writes, bench_sustained_throughput);
+criterion_group!(
+    benches,
+    bench_reads,
+    bench_writes,
+    bench_sustained_throughput
+);
 criterion_main!(benches);

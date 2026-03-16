@@ -23,8 +23,11 @@ use crate::cache::PrefixCache;
 
 /// Full system orchestrator.
 pub struct Orchestrator {
+    /// Hot Tier KV store holding live entities.
     pub store: HotStore,
+    /// Warm Tier temporal graph holding semantic labels and edges.
     pub graph: CausalGraph,
+    /// The Intelligence Layer cache for reasoning contexts.
     pub cache: Arc<PrefixCache>,
 }
 

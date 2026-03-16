@@ -177,16 +177,10 @@ impl CausalGraph {
     pub fn tag_entity(&self, entity_id: u64, labels: Vec<LabelId>) {
         let mut g = self.inner.write().unwrap();
         for label in &labels {
-            g.label_entities
-                .entry(*label)
-                .or_default()
-                .push(entity_id);
+            g.label_entities.entry(*label).or_default().push(entity_id);
             g.label_store.insert(*label, entity_id);
         }
-        g.entity_labels
-            .entry(entity_id)
-            .or_default()
-            .extend(labels);
+        g.entity_labels.entry(entity_id).or_default().extend(labels);
         debug!("tagged entity {entity_id}");
     }
 
@@ -280,7 +274,11 @@ impl CausalGraph {
         }
 
         // Collect return samples for correlation calculation.
-        let src_samples = g_read.return_samples.get(&src_id).cloned().unwrap_or_default();
+        let src_samples = g_read
+            .return_samples
+            .get(&src_id)
+            .cloned()
+            .unwrap_or_default();
 
         // We need to drop the read lock before acquiring the write lock.
         drop(g_read);
@@ -308,9 +306,7 @@ impl CausalGraph {
             // Compute Pearson r and a t-test–derived p-value.
             if let Some((r, p_value)) = pearson_with_pvalue(&src_samples, &cand_samples) {
                 if p_value < 0.05 {
-                    info!(
-                        "TEMPORAL_LINK: {src_id} ↔ {candidate_id} r={r:.3} p={p_value:.4}"
-                    );
+                    info!("TEMPORAL_LINK: {src_id} ↔ {candidate_id} r={r:.3} p={p_value:.4}");
                     // For each shared label pair, create a directed edge.
                     for &sl in &src_labels {
                         for &cl in &cand_labels {
@@ -478,7 +474,7 @@ mod tests {
         let g = make_graph();
         // Register two entities with shared labels.
         g.tag_entity(100, vec![LabelId::L_CRUDE_SHOCK]);
-        g.tag_entity(101, vec![LabelId::L_CRUDE_SHOCK]);
+        g.tag_entity(101, vec![LabelId::L_CRUDE_SHOCK, LabelId::L_MACRO_RELEASE]);
 
         // Feed perfectly correlated return samples.
         for i in 0..50 {
@@ -489,7 +485,10 @@ mod tests {
 
         g.materialize_temporal_link(100, 0.3);
         // Perfect correlation → p ≈ 0, link should be materialised.
-        assert!(g.temporal_link_count() > 0, "expected TEMPORAL_LINK to be materialised");
+        assert!(
+            g.temporal_link_count() > 0,
+            "expected TEMPORAL_LINK to be materialised"
+        );
     }
 
     #[test]
@@ -510,17 +509,25 @@ mod tests {
         let g2 = make_graph();
         g2.tag_entity(200, vec![LabelId::L_EARNINGS_SURPRISE]);
         g2.tag_entity(201, vec![LabelId::L_EARNINGS_SURPRISE]);
-        let samples_a = [0.1, -0.1, 0.1, -0.1, 0.1, -0.3, 0.2, -0.2, 0.0, 0.0,
-                         0.05, -0.05, 0.0, 0.0, 0.1, -0.1, 0.05, -0.05, 0.0, 0.01];
-        let samples_b = [0.0, 0.0, -0.1, 0.1, -0.2, 0.2, 0.0, 0.0, 0.3, -0.3,
-                         -0.05, 0.05, 0.0, 0.0, -0.1, 0.1, 0.0, 0.0, -0.05, 0.05];
+        let samples_a = [
+            0.1, -0.1, 0.1, -0.1, 0.1, -0.3, 0.2, -0.2, 0.0, 0.0, 0.05, -0.05, 0.0, 0.0, 0.1, -0.1,
+            0.05, -0.05, 0.0, 0.01,
+        ];
+        let samples_b = [
+            0.0, 0.0, -0.1, 0.1, -0.2, 0.2, 0.0, 0.0, 0.3, -0.3, -0.05, 0.05, 0.0, 0.0, -0.1, 0.1,
+            0.0, 0.0, -0.05, 0.05,
+        ];
         for (&a, &b) in samples_a.iter().zip(samples_b.iter()) {
             g2.record_return(200, a);
             g2.record_return(201, b);
         }
         g2.materialize_temporal_link(200, 0.1);
         // Uncorrelated → no temporal links.
-        assert_eq!(g2.temporal_link_count(), 0, "should NOT materialise link for uncorrelated data");
+        assert_eq!(
+            g2.temporal_link_count(),
+            0,
+            "should NOT materialise link for uncorrelated data"
+        );
     }
 
     #[test]

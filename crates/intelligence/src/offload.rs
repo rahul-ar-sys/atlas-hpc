@@ -6,8 +6,8 @@
 //! For the MVP and Windows dev environments, state is serialised to a temp
 //! file, providing the same interface without the hardware dependency.
 
+use serde::{Deserialize, Serialize};
 use std::path::PathBuf;
-use serde::{de::DeserializeOwned, Serialize};
 use tracing::debug;
 
 // ─────────────────────────────────────────────────────────────────────────────
@@ -100,10 +100,13 @@ impl NvmeOffloadAdapter for SoftwareNvmeAdapter {
             .next_slot
             .fetch_add(1, std::sync::atomic::Ordering::Relaxed);
         let path = self.blob_path(slot_id);
-        let bytes = serde_json::to_vec(state)
-            .map_err(|e| OffloadError::Serialization(e.to_string()))?;
+        let bytes =
+            serde_json::to_vec(state).map_err(|e| OffloadError::Serialization(e.to_string()))?;
         std::fs::write(&path, bytes).map_err(|e| OffloadError::Io(e.to_string()))?;
-        debug!("offloaded agent state for '{}' to {:?}", state.agent_id, path);
+        debug!(
+            "offloaded agent state for '{}' to {:?}",
+            state.agent_id, path
+        );
         Ok(OffloadHandle { slot_id })
     }
 

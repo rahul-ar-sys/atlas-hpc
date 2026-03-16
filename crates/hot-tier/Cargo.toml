@@ -7,9 +7,11 @@ edition.workspace = true
 atlas-types      = { workspace = true }
 crossbeam        = { workspace = true }
 crossbeam-channel = { workspace = true }
-leapfrog         = { workspace = true }
+dashmap          = "6.1.0"
 core_affinity    = { workspace = true }
 tracing          = { workspace = true }
+tokio = { workspace = true, features = ["macros", "rt-multi-thread"] }
+tokio-tungstenite = { version = "0.28.0", features = ["connect"] }
 
 [dev-dependencies]
 criterion = { workspace = true }
