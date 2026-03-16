@@ -27,7 +27,7 @@ use std::time::Duration;
 
 use atlas_types::{now_ns, SignalEvent, WeightedEntity};
 use crossbeam_channel::{bounded, Receiver, Sender};
-use dashmap::DashMap;
+//use dashmap::DashMap;
 use tracing::{debug, info};
 
 // ─────────────────────────────────────────────────────────────────────────────

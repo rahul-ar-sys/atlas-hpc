@@ -9,12 +9,13 @@ use tracing::{debug, error, info};
 /// Async adapter that ingests a live market feed from Binance's WebSocket API
 pub struct BinanceFeedAdapter {
     store: HotStore,
+    max_entities: u64, // ADDED: To bridge hashes to seeded graph
 }
 
 impl BinanceFeedAdapter {
     /// Create a new BinanceFeedAdapter attached to the existing HotStore
-    pub fn new(store: HotStore) -> Self {
-        Self { store }
+    pub fn new(store: HotStore, max_entities: u64) -> Self {
+        Self { store, max_entities }
     }
 
     /// Run the adapter, polling messages indefinitely until disconnect
@@ -36,17 +37,17 @@ impl BinanceFeedAdapter {
                 Ok(Message::Text(t)) => {
                     self.process_batch(&t);
                 }
-                Ok(Message::Ping(_)) => {}
-                Ok(Message::Pong(_)) => {}
+                Ok(Message::Ping(_)) | Ok(Message::Pong(_)) => {}
                 Ok(Message::Close(_)) => {
                     info!("Binance WebSocket disconnected");
                     break;
                 }
+                // ADDED: Explicitly ignore binary data and raw frames to satisfy the compiler
+                Ok(Message::Binary(_)) | Ok(Message::Frame(_)) => {}
                 Err(e) => {
                     error!("Binance WebSocket error: {}", e);
                     break;
                 }
-                _ => {}
             }
         }
     }
@@ -61,7 +62,9 @@ impl BinanceFeedAdapter {
                         // Deterministic ID for symbol
                         let mut hasher = DefaultHasher::new();
                         sym.hash(&mut hasher);
-                        let entity_id = hasher.finish();
+                        
+                        // FIX 1: Modulo the hash to force it into the seeded 0..9999 range
+                        let entity_id = hasher.finish() % self.max_entities;
 
                         // Register if missing, then tick
                         if !self.store.contains(entity_id) {
@@ -70,11 +73,12 @@ impl BinanceFeedAdapter {
                         }
                         
                         self.store.tick_price(entity_id, price.into());
-                        // Apply a small synthetic weight bump to simulate market momentum
-                        self.store.update_weight(entity_id, 0.05, 0.9, 0.1); 
                         
-                        // Random causal spike 1% of the time to exercise Agent
-                        if fastrand::f32() < 0.01 {
+                        // FIX 2: Massive synthetic surprise (200.0) to ensure ΔW > 0.15 threshold
+                        self.store.update_weight(entity_id, 200.0, 0.9, 0.1); 
+                        
+                        // FIX 3: Increase causal spike probability to 15% for the short 10s simulation
+                        if fastrand::f32() < 0.15 {
                             self.store.set_causal_trigger(entity_id, true);
                         }
                     }

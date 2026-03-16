@@ -6,7 +6,7 @@
 //! For the MVP and Windows dev environments, state is serialised to a temp
 //! file, providing the same interface without the hardware dependency.
 
-use serde::{Deserialize, Serialize};
+//use serde::{Deserialize, Serialize};
 use std::path::PathBuf;
 use tracing::debug;
 

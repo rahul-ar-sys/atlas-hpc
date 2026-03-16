@@ -114,11 +114,12 @@ fn main() {
     thread::spawn(move || {
         let rt = tokio::runtime::Runtime::new().expect("tokio runtime");
         rt.block_on(async move {
-            let adapter = hot_tier::BinanceFeedAdapter::new(binance_store);
+            // FIX 4: Pass ENTITY_COUNT down to the adapter
+            let adapter = hot_tier::BinanceFeedAdapter::new(binance_store, ENTITY_COUNT as u64);
             adapter.run().await;
         });
     });
-
+    
     let sim_start = Instant::now();
     while sim_start.elapsed() < SIM_DURATION {
         thread::sleep(Duration::from_secs(1));
