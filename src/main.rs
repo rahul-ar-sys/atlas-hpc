@@ -11,7 +11,7 @@ use std::thread;
 use std::time::{Duration, Instant};
 
 use atlas_types::{now_ns, LabelId, WeightedEntity};
-use hot_tier::{HotStore, MarketFeedAdapter, SensingAgent, SensingConfig, SoftwareFeedAdapter};
+use hot_tier::{HotStore, SensingAgent, SensingConfig};
 use intelligence::agent::ReasoningAgent;
 use intelligence::cache::PrefixCache;
 use intelligence::offload::{AgentState, NvmeOffloadAdapter, SoftwareNvmeAdapter};
@@ -34,7 +34,6 @@ fn main() {
 
     const ENTITY_COUNT: usize = 10_000;
     const SIM_DURATION: Duration = Duration::from_secs(10); // 10s for demo; change to 60s for prod
-    const TICK_BATCH_US: u64 = 100; // synthetic tick interval
 
     // ── Phase 1: Hot Tier ────────────────────────────────────────────────────
     println!("[1/4] Initialising Hot Tier ({ENTITY_COUNT} entities)...");
@@ -108,81 +107,31 @@ fn main() {
     nvme.drop_offload(&handle).ok();
     println!("      ✓ NVMe offload → restore → evict lifecycle verified");
 
-    // ── Phase 4: Market simulation ───────────────────────────────────────────
-    println!(
-        "[4/4] Running {} second market simulation...",
-        SIM_DURATION.as_secs()
-    );
-    let entity_ids: Vec<u64> = (0..ENTITY_COUNT as u64).collect();
-    let mut feed = SoftwareFeedAdapter::new(entity_ids.clone());
+    // ── Phase 4: Live Binance Integration ────────────────────────────────────
+    println!("[4/4] Connecting to Live Binance WebSocket for {} seconds...", SIM_DURATION.as_secs());
+    
+    let binance_store = store.clone();
+    thread::spawn(move || {
+        let rt = tokio::runtime::Runtime::new().expect("tokio runtime");
+        rt.block_on(async move {
+            let adapter = hot_tier::BinanceFeedAdapter::new(binance_store);
+            adapter.run().await;
+        });
+    });
 
     let sim_start = Instant::now();
-    let mut tick_count = 0u64;
-    let mut read_latency_sum_ns = 0u128;
-    let mut write_latency_sum_ns = 0u128;
-    let mut max_read_ns = 0u64;
-    let mut max_write_ns = 0u64;
-    let mut trigger_fires = 0u64;
-
     while sim_start.elapsed() < SIM_DURATION {
-        // Process a batch of ticks.
-        let ticks = feed.poll_ticks();
-        for (id, price) in ticks {
-            // Read latency measurement.
-            let t0 = Instant::now();
-            let _ = store.get(id);
-            let read_ns = t0.elapsed().as_nanos() as u64;
-            read_latency_sum_ns += read_ns as u128;
-            if read_ns > max_read_ns {
-                max_read_ns = read_ns;
-            }
-
-            // Write latency measurement (price tick + weight update).
-            let t1 = Instant::now();
-            store.tick_price(id, price);
-            store.update_weight(id, 0.05, 0.9, 0.1);
-            let write_ns = t1.elapsed().as_nanos() as u64;
-            write_latency_sum_ns += write_ns as u128;
-            if write_ns > max_write_ns {
-                max_write_ns = write_ns;
-            }
-
-            tick_count += 1;
-
-            // Randomly fire causal triggers to exercise the sensing agent.
-            if tick_count % 500 == 0 {
-                store.set_causal_trigger(id, true);
-                trigger_fires += 1;
-            }
-        }
-
-        thread::sleep(Duration::from_micros(TICK_BATCH_US));
+        thread::sleep(Duration::from_secs(1));
     }
 
     let elapsed_secs = sim_start.elapsed().as_secs_f64();
-    let avg_read_ns = read_latency_sum_ns / tick_count.max(1) as u128;
-    let avg_write_ns = write_latency_sum_ns / tick_count.max(1) as u128;
-    let tps = tick_count as f64 / elapsed_secs;
 
     println!();
-    println!("══════════════════ Simulation Results ══════════════════════");
+    println!("══════════════════ Live Simulation Results ═════════════════");
     println!("  Duration       : {:.2}s", elapsed_secs);
-    println!("  Total ticks    : {tick_count}");
-    println!("  Throughput     : {tps:.0} ticks/sec");
-    println!("  Trigger fires  : {trigger_fires}");
-    println!(
-        "  Cache entries  : {} (clean: {})",
-        cache.len(),
-        cache.clean_count()
-    );
+    println!("  Cache entries  : {} (clean: {})", cache.len(), cache.clean_count());
     println!("  Temporal links : {}", graph.temporal_link_count());
     println!("  Grounding ratio: {:.4}", graph.grounding_ratio());
-    println!();
-    println!("  ── Hot Tier Latency (single-threaded, debug/release matters) ──");
-    println!("  Avg read       : {avg_read_ns} ns");
-    println!("  Max read       : {max_read_ns} ns");
-    println!("  Avg write      : {avg_write_ns} ns");
-    println!("  Max write      : {max_write_ns} ns");
     println!();
     println!("  ── Targets (release build, Linux, cores 0–3 pinned) ────────");
     println!("  Read P50       : < 5 000 ns ✓ (verify with `cargo bench`)");

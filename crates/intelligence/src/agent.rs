@@ -125,7 +125,7 @@ impl ReasoningAgent {
     fn produce_insight(&self, ctx: &ReasoningContext) -> Insight {
         let eid = ctx.trigger.entity_id();
         let confidence = if ctx.cache_hit { 0.92 } else { 0.75 };
-        let summary = format!(
+        let prompt_summary = format!(
             "Entity {} triggered by {:?}. {} related entities discovered (cache_hit={}).",
             eid,
             match &ctx.trigger {
@@ -135,12 +135,45 @@ impl ReasoningAgent {
             ctx.related_entities.len(),
             ctx.cache_hit,
         );
+
+        let final_summary = match self.query_local_llm(&prompt_summary) {
+            Some(llm_insight) => format!("LLM: {}", llm_insight),
+            None => prompt_summary, // Fallback to raw context
+        };
+
         Insight {
             entity_id: eid,
-            summary,
+            summary: final_summary,
             confidence,
             contributing_labels: vec![LabelId::L_CRUDE_SHOCK, LabelId::L_RATE_HIKE],
         }
+    }
+
+    /// Queries a local LLM (e.g. Ollama) via an OpenAI-compatible REST endpoint
+    fn query_local_llm(&self, prompt: &str) -> Option<String> {
+        let client = reqwest::blocking::Client::new();
+        let payload = serde_json::json!({
+            "model": "llama3", 
+            "messages": [
+                { "role": "system", "content": "You are Atlas-Finance MVP, an elite HFT trading AI. Analyze the causal graph spike and produce a bold, 1-sentence trading insight." },
+                { "role": "user", "content": prompt }
+            ],
+            "stream": false
+        });
+
+        match client.post("http://localhost:11434/v1/chat/completions").json(&payload).send() {
+            Ok(resp) => {
+                if let Ok(json) = resp.json::<serde_json::Value>() {
+                    if let Some(content) = json["choices"][0]["message"]["content"].as_str() {
+                        return Some(content.trim().to_string());
+                    }
+                }
+            }
+            Err(e) => {
+                debug!("Local LLM not reachable (start Ollama!): {}", e);
+            }
+        }
+        None
     }
 }
 

@@ -24,6 +24,7 @@ warm-tier        = { path = "crates/warm-tier" }
 intelligence     = { path = "crates/intelligence" }
 tracing          = { workspace = true }
 tracing-subscriber = { workspace = true }
+tokio            = { workspace = true }
 
 [workspace.package]
 version = "0.1.0"

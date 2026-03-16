@@ -17,6 +17,10 @@
 
 #![deny(missing_docs)]
 
+/// Ingests live WebSocket streams from Binance.
+pub mod binance;
+pub use binance::BinanceFeedAdapter;
+
 use std::sync::Arc;
 use std::thread;
 use std::time::Duration;
@@ -135,6 +139,11 @@ impl HotStore {
     /// Returns `true` if the store is empty.
     pub fn is_empty(&self) -> bool {
         self.inner.len() == 0
+    }
+
+    /// Returns `true` if the map contains a value for the specified entity ID.
+    pub fn contains(&self, entity_id: u64) -> bool {
+        self.inner.contains_key(&entity_id)
     }
 }
 
