@@ -11,7 +11,7 @@ dashmap          = "6.1.0"
 core_affinity    = { workspace = true }
 tracing          = { workspace = true }
 tokio = { workspace = true, features = ["macros", "rt-multi-thread"] }
-tokio-tungstenite = { version = "0.28.0", features = ["connect"] }
+tokio-tungstenite = { version = "0.28.0", features = ["connect", "rustls-tls-native-roots"] }
 futures-util = "0.3.32"
 serde_json.workspace = true
 fastrand = "2.3.0"
