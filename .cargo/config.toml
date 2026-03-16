@@ -1,0 +1,17 @@
+[build]
+# Enable native CPU optimisations (AVX-512 / AVX2 where available) and max optimisation.
+# NOTE: binaries compiled with native become non-portable; intentional for HFT deployments.
+rustflags = [
+    "-C", "target-cpu=native",
+    "-C", "opt-level=3",
+    "-C", "force-frame-pointers=yes",    # perf/flamegraph friendly
+]
+
+[target.x86_64-unknown-linux-gnu]
+# On Linux, link against jemalloc for deterministic allocation latency.
+# (uncomment after adding jemallocator crate to the workspace)
+# rustflags = ["-C", "target-cpu=native", "-C", "opt-level=3"]
+
+[alias]
+bench-all = "bench --workspace --all-features"
+test-all  = "test --workspace"

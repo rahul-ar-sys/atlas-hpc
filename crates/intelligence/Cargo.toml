@@ -1,0 +1,17 @@
+[package]
+name    = "intelligence"
+version.workspace = true
+edition.workspace = true
+
+[dependencies]
+atlas-types      = { workspace = true }
+hot-tier         = { path = "../hot-tier" }
+warm-tier        = { path = "../warm-tier" }
+crossbeam-channel = { workspace = true }
+dashmap          = { workspace = true }
+tokio            = { workspace = true }
+aes-gcm          = { workspace = true }
+serde            = { workspace = true }
+serde_json       = { workspace = true }
+tracing          = { workspace = true }
+rand             = { workspace = true }

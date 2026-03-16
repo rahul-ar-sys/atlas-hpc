@@ -1,0 +1,20 @@
+[package]
+name    = "hot-tier"
+version.workspace = true
+edition.workspace = true
+
+[dependencies]
+atlas-types      = { workspace = true }
+crossbeam        = { workspace = true }
+crossbeam-channel = { workspace = true }
+leapfrog         = { workspace = true }
+core_affinity    = { workspace = true }
+tracing          = { workspace = true }
+
+[dev-dependencies]
+criterion = { workspace = true }
+rand      = { workspace = true }
+
+[[bench]]
+name    = "hot_tier_bench"
+harness = false
